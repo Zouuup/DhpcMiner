@@ -55,6 +55,7 @@ var rootCmd = &cobra.Command{
 		ctx := context.Background()
 
 		// Create a Cosmos client instance
+		// TODO: doesn't reconnect if the connection is lost
 		client, err := cosmosclient.New(ctx, cosmosclient.WithAddressPrefix("dhpc"))
 		if err != nil {
 			log.Fatal(err)
@@ -237,6 +238,8 @@ func (m *Miner) processAnswerPendingRecord(record request.MinerResponse) {
 				log.WithFields(logrus.Fields{"UUID": record.UUID, "LOG": txResp.RawLog, "TXHash": txResp.TxHash, "Error": err}).Error("Error when broadcasting tx at stage 1")
 			}
 			log.WithFields(logrus.Fields{"UUID": record.UUID, "Answer": record.Answer, "TXHash": txResp.TxHash}).Info("Broadcasted tx at stage 1")
+			// TODO: clean m.responses[record.UUID], remove record that we just used
+			m.responses[record.UUID] = nil
 			break
 		}
 	}
