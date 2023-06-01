@@ -7,14 +7,18 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	// Importing the types package of your blog blockchain
-	"Dhpc/x/request/types"
+	data "Dhpc/x/data/types"
+
+	request "Dhpc/x/request/types"
 
 	"github.com/ignite/cli/ignite/pkg/cosmosaccount"
 	"github.com/ignite/cli/ignite/pkg/cosmosclient"
@@ -25,7 +29,7 @@ import (
 
 type Miner struct {
 	mu        sync.RWMutex
-	responses map[string]*types.MinerResponse
+	responses map[string]*request.MinerResponse
 	account   cosmosaccount.Account
 	address   string
 	client    cosmosclient.Client
@@ -86,7 +90,7 @@ func NewMiner(account cosmosaccount.Account, client cosmosclient.Client, ctx con
 
 	log.WithField("address", addr).Info("Starting miner")
 	return &Miner{
-		responses: make(map[string]*types.MinerResponse),
+		responses: make(map[string]*request.MinerResponse),
 		account:   account,
 		client:    client,
 		address:   addr,
@@ -97,10 +101,10 @@ func NewMiner(account cosmosaccount.Account, client cosmosclient.Client, ctx con
 // Example of how you can start miner. This function is not complete.
 func (m *Miner) Start() {
 
-	queryClient := types.NewQueryClient(m.client.Context())
+	queryClient := request.NewQueryClient(m.client.Context())
 
 	for {
-		queryResp, err := queryClient.RequestRecordAllMinerPending(m.ctx, &types.QueryAllRequestRecordRequest{})
+		queryResp, err := queryClient.RequestRecordAllMinerPending(m.ctx, &request.QueryAllRequestRecordRequest{})
 		if err != nil {
 			log.Print(err)
 		}
@@ -116,7 +120,7 @@ func (m *Miner) Start() {
 // Here start two goroutines: one to monitor miner_pending, another to monitor answer_pending
 
 // Processes a record from miner_pending
-func (m *Miner) processMinerPendingRecord(record types.RequestRecord) {
+func (m *Miner) processMinerPendingRecord(record request.RequestRecord) {
 	m.mu.RLock()
 	_, exist := m.responses[record.UUID]
 	m.mu.RUnlock()
@@ -127,22 +131,41 @@ func (m *Miner) processMinerPendingRecord(record types.RequestRecord) {
 	}
 
 	m.mu.RLock()
-	m.responses[record.UUID] = &types.MinerResponse{}
+	m.responses[record.UUID] = &request.MinerResponse{}
 	m.mu.RUnlock()
 
 	log.WithFields(logrus.Fields{"UUID": record.UUID}).Info("Processing record")
 
-	// Generate random number between 1-1000 for answer and hashused
-	answer := int32(rand.Intn(1000) + 1)
+	// Generate dataUsed
+	dataQueryClient := data.NewQueryClient(m.client.Context())
 
-	// Generate salt
-	salt := int32(rand.Intn(10000000000))
+	queryResp, err := dataQueryClient.DataAllByAddr(m.ctx, &data.QueryAllDataRequestByAddr{Address: record.Address})
+	if err != nil {
+		log.WithFields(logrus.Fields{"UUID": record.UUID}).Error("Error in getting data from data module")
+	}
+
+	var dataUsedArray []string
+	var answer int32
+	for _, data := range queryResp.Data {
+		dataUsedArray = append(dataUsedArray, data.Hash)
+		answer = answer + data.Score
+	}
+	if len(dataUsedArray) > 0 {
+		// TODO: This is weak, should be based on weighted average of scores based on user reputation
+		answer = answer / int32(len(dataUsedArray))
+	} else {
+		// TODO: if this is zero, it doesn't get carried on the message and causes havoc
+		answer = int32(0)
+	}
+
+	dataUsed := strings.Join(dataUsedArray, ",")
+
+	// Generate a random salt, make sure it's always positive
+	salt := int32(rand.Intn(100000))
 
 	// Generate sumStr
+	spew.Dump(answer, salt)
 	sumStr := strconv.Itoa(int(answer) + int(salt))
-
-	// Generate dataUsed
-	dataUsed := "fe13119fb084fe8bbf5fe3ab7cc89b3b,3b5d5c3712955042212316173ccf37be,2cd6ee2c70b0bde53fbe6cac3c8b8bb1"
 
 	// Generate a random UUID
 	minerUUID := uuid.New().String()
@@ -153,7 +176,7 @@ func (m *Miner) processMinerPendingRecord(record types.RequestRecord) {
 	md5sum := hex.EncodeToString(hash.Sum(nil))
 
 	// Create a MinerResponse
-	response := &types.MinerResponse{
+	response := &request.MinerResponse{
 		UUID:        minerUUID,
 		RequestUUID: record.UUID,
 		Hash:        md5sum,
@@ -163,7 +186,7 @@ func (m *Miner) processMinerPendingRecord(record types.RequestRecord) {
 		Creator:     m.address,
 	}
 
-	msg := types.NewMsgCreateMinerResponse(
+	msg := request.NewMsgCreateMinerResponse(
 		m.address,
 		minerUUID,
 		record.UUID,
@@ -188,31 +211,32 @@ func (m *Miner) processMinerPendingRecord(record types.RequestRecord) {
 }
 
 // Processes a record from answer_pending
-func (m *Miner) processAnswerPendingRecord(record types.MinerResponse) {
-	queryClient := types.NewQueryClient(m.client.Context())
-	request := types.QueryGetRequestRecordRequest{
+func (m *Miner) processAnswerPendingRecord(record request.MinerResponse) {
+	queryClient := request.NewQueryClient(m.client.Context())
+	requestRecord := request.QueryGetRequestRecordRequest{
 		UUID: record.RequestUUID,
 	}
 	for {
-		queryResp, err := queryClient.RequestRecord(m.ctx, &request)
+		queryResp, err := queryClient.RequestRecord(m.ctx, &requestRecord)
 		if err != nil {
 			log.WithFields(logrus.Fields{"UUID": record.RequestUUID}).Error("Error when querying request record at stage 1")
 		}
 
 		if queryResp.RequestRecord.Stage == 1 {
 			log.WithFields(logrus.Fields{"UUID": record.RequestUUID}).Info("Request is in stage 1")
-			msg := types.NewMsgUpdateMinerResponse(
+			msg := request.NewMsgUpdateMinerResponse(
 				m.address,
 				record.UUID,
 				record.RequestUUID,
 				record.Answer,
 				record.Salt,
 			)
+			spew.Dump(record)
 			txResp, err := m.client.BroadcastTx(m.ctx, m.account, msg)
 			if err != nil {
 				log.WithFields(logrus.Fields{"UUID": record.UUID, "LOG": txResp.RawLog, "TXHash": txResp.TxHash, "Error": err}).Error("Error when broadcasting tx at stage 1")
 			}
-			log.WithFields(logrus.Fields{"UUID": record.UUID, "LOG": txResp.RawLog, "TXHash": txResp.TxHash}).Info("Broadcasted tx at stage 1")
+			log.WithFields(logrus.Fields{"UUID": record.UUID, "Answer": record.Answer, "TXHash": txResp.TxHash}).Info("Broadcasted tx at stage 1")
 			break
 		}
 	}
