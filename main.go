@@ -16,14 +16,16 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
+	common "github.com/ethereum/go-ethereum/common"
+	types "github.com/ethereum/go-ethereum/core/types"
+	ethclient "github.com/ethereum/go-ethereum/ethclient"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	// Importing the types package of your blog blockchain
-	dhpc "github.com/DhpcChain/Dhpc"
+	data "Dhpc/x/data/types"
+
+	request "Dhpc/x/request/types"
 
 	"github.com/ignite/cli/ignite/pkg/cosmosaccount"
 	"github.com/ignite/cli/ignite/pkg/cosmosclient"
@@ -89,7 +91,10 @@ func main() {
 
 // Initialize new miner
 func NewMiner(account cosmosaccount.Account, client cosmosclient.Client, ctx context.Context) *Miner {
-	addr := account.Address("dhpc")
+	addr, err := account.Address("dhpc")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	log.WithField("address", addr).Info("Starting miner")
 	return &Miner{
@@ -245,9 +250,7 @@ func (m *Miner) processAnswerPendingRecord(record request.MinerResponse) {
 			break
 		}
 	}
-
 }
-
 func (m *Miner) getLogs(record request.RequestRecord) ([]types.Log, error) {
 	// Step 1, find if we have an RPC for the given network, we can detect that by looking at network field of the request and looking up environment variables with same name + _RPC
 	// check if networkname + _RPC is set in the environment variables
