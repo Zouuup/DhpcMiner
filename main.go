@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
+	"fmt"
+	"math/big"
 	"math/rand"
 	"os"
 	"strconv"
@@ -12,13 +15,15 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	// Importing the types package of your blog blockchain
-	data "Dhpc/x/data/types"
-
-	request "Dhpc/x/request/types"
+	dhpc "github.com/DhpcChain/Dhpc"
 
 	"github.com/ignite/cli/ignite/pkg/cosmosaccount"
 	"github.com/ignite/cli/ignite/pkg/cosmosclient"
@@ -84,10 +89,7 @@ func main() {
 
 // Initialize new miner
 func NewMiner(account cosmosaccount.Account, client cosmosclient.Client, ctx context.Context) *Miner {
-	addr, err := account.Address("dhpc")
-	if err != nil {
-		log.Fatal(err)
-	}
+	addr := account.Address("dhpc")
 
 	log.WithField("address", addr).Info("Starting miner")
 	return &Miner{
@@ -243,4 +245,43 @@ func (m *Miner) processAnswerPendingRecord(record request.MinerResponse) {
 			break
 		}
 	}
+
+}
+
+func (m *Miner) getLogs(record request.RequestRecord) ([]types.Log, error) {
+	// Step 1, find if we have an RPC for the given network, we can detect that by looking at network field of the request and looking up environment variables with same name + _RPC
+	// check if networkname + _RPC is set in the environment variables
+	rpc_address := os.Getenv(record.Network + "_RPC")
+	if rpc_address == "" {
+		log.WithFields(logrus.Fields{"UUID": record.UUID, "Network": record.Network}).Error("RPC address not found in environment variables")
+		return nil, errors.New("RPC address not found in environment variables")
+	}
+
+	// now we have the RPC address, we can connect to the RPC and get the data
+	ethClient, err := ethclient.Dial(rpc_address)
+	if err != nil {
+		log.WithFields(logrus.Fields{"UUID": record.UUID, "Network": record.Network, "RPC": rpc_address}).Error("Error in connecting to RPC")
+		return nil, errors.New("Error in connecting to RPC")
+	}
+
+	address := common.HexToAddress(record.Address)
+
+	query := ethereum.FilterQuery{
+		FromBlock: big.NewInt(0),
+		ToBlock:   big.NewInt(record.Block),
+		Addresses: []common.Address{
+			address,
+		},
+		Topics: [][]common.Hash{
+			nil,
+			{address.Hash()},
+			{address.Hash()},
+		},
+	}
+	logs, err := ethClient.FilterLogs(context.Background(), query)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving logs: %v", err)
+	}
+
+	return logs, nil
 }
