@@ -23,9 +23,9 @@ import (
 	"github.com/spf13/cobra"
 
 	// Importing the types package of your blog blockchain
-	data "Dhpc/x/data/types"
+	data "github.com/DhpcChain/Dhpc/x/data/types"
 
-	request "Dhpc/x/request/types"
+	request "github.com/DhpcChain/Dhpc/x/request/types"
 
 	"github.com/ignite/cli/ignite/pkg/cosmosaccount"
 	"github.com/ignite/cli/ignite/pkg/cosmosclient"

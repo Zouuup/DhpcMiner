@@ -1,14 +1,11 @@
-module DhpcMiner
+module github.com/DhpcChain/DhpcMiner
 
 go 1.20
-
-replace Dhpc => ../Dhpc
 
 replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
 
 require (
-	Dhpc v0.0.0-00010101000000-000000000000
-	github.com/davecgh/go-spew v1.1.1
+	github.com/DhpcChain/Dhpc v0.0.0-20230611113531-63dfc2691546
 	github.com/ethereum/go-ethereum v1.12.0
 	github.com/google/uuid v1.3.0
 	github.com/ignite/cli v0.26.1
@@ -43,6 +40,7 @@ require (
 	github.com/cosmos/ibc-go/v6 v6.1.0 // indirect
 	github.com/cosmos/ledger-cosmos-go v0.12.1 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/deckarep/golang-set/v2 v2.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/dgraph-io/badger/v2 v2.2007.4 // indirect
@@ -85,6 +83,7 @@ require (
 	github.com/mimoo/StrobeGo v0.0.0-20210601165009-122bf33a46e0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
+	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
